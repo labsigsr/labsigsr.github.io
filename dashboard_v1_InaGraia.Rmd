@@ -1,0 +1,96 @@
+---
+title: "Meu dashboard 1"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(sf)
+library(tmap)
+library(ggplot2)
+library(plotly)
+library(googlesheets4)
+```
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Mapa 1
+
+```{r}
+
+ssa <- read_sf("bairros_ssa.shp")
+
+mapa <- tm_shape(ssa) +
+  tm_polygons("X2021.03.17",
+              style="jenks",
+              title="Casos acumulados em 17/03/2021")
+
+tmap_mode("view")
+
+tmap_last()
+
+
+```
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Chart B
+
+```{r}
+# Tira a necessidade de autenticação no google pra acessar a planilha
+sheets_deauth()
+
+# Função para carregar os dados da planilha remota
+load_remote_data <- function() {
+read_sheet("https://docs.google.com/spreadsheets/d/1qwCpFUtG7tC63MEfZwpzdWDkB2dFpUyK56Jjbuc-gts/edit?usp=sharing")
+}
+dados <- load_remote_data()
+
+# Cria um gráfico com os dados de casoa ativos a partir da planilha do Geocombate
+grafico1 <- ggplot(dados, aes(x = Data, y = Casos)) +
+geom_line() +
+geom_smooth()+
+ggtitle("Casos ativos de COVID 19 em Salvador \ne linha de tendência ")+
+theme_ipsum_ps()
+ggplotly(grafico1)
+
+```
+
+### Pessoas infectadas em Salvador
+
+```{r}
+infectados <- tail(dados$Total, n=1)
+
+
+  valueBox(value = infectados, icon = "fas fa-users")
+
+```
+
+### Dias de pandemia em Salvador
+
+```{r}
+
+hoje <- Sys.Date()
+         
+tempo <- round(difftime(hoje, "2020-03-23"))
+
+  valueBox(value = tempo, icon = "fas fa-calendar")
+
+```
+
+### Contagem de casos
+
+```{r}
+
+infectados1 <- head(dados$Total, n=1)
+
+
+  valueBox(value = infectados1, icon = "fas fa-covid-19")
+
+```
+
