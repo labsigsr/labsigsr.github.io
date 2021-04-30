@@ -1,0 +1,170 @@
+---
+title: "Meu dashboard 1"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+
+library(flexdashboard)
+library(sf)
+library(tmap)
+library(tidyverse)
+library(googlesheets4)
+library(plotly)
+library(zoo)
+library(hrbrthemes)
+```
+
+```{r get-data, message=FALSE, include=FALSE}
+
+## Data atual
+data_atual <- Sys.Date()
+
+# Tira a necessidade de autenticação no google pra acessar a planilha
+sheets_deauth()
+
+# Função para carregar os dados da planilha remota (para o grafico)
+load_remote_data <- function() {
+  read_sheet("https://docs.google.com/spreadsheets/d/1qwCpFUtG7tC63MEfZwpzdWDkB2dFpUyK56Jjbuc-gts/edit?usp=sharing")
+}
+
+# Função para carregar os dados da planilha remota (para o mapa de casos acumulados)
+load_remote_data_mapa <- function() {
+  read_sheet("https://docs.google.com/spreadsheets/d/185Yj5UXCeipKxRv81WOOT_MM_pSOZ8OSJeSF0NF6y7E/edit?pli=1#gid=277838136")
+}
+
+# Função para carregar os dados da planilha remota (para o mapa de incidencia)
+load_remote_data_mapa1 <- function() {
+  read_sheet("https://docs.google.com/spreadsheets/d/185Yj5UXCeipKxRv81WOOT_MM_pSOZ8OSJeSF0NF6y7E/edit?usp=sharing")
+}
+
+dados <- load_remote_data()
+dados_mapa <- load_remote_data_mapa()
+dados_mapa1 <- load_remote_data_mapa1()
+
+dados
+dados_mapa
+dados_mapa1
+
+```
+
+Column {.tabset data-width=500}
+-----------------------------------------------------------------------
+
+### Casos acumulados de covid 19
+
+```{r}
+
+## Seleciona a primeira e a ultima coluna da tabela de casos acumuludos (sempre virá na ultima coluna a data mais recorrente disponivel)
+bairros_acum <- dados_mapa[,c(1, ncol(dados_mapa),drop = FALSE)]
+
+
+## Renomeia os campos pra que o join funcione
+names(bairros_acum) <- c("b_novo_ok", "acumulados")
+
+## Puxar um shp apenas com as informacoes de bairro (shp limpo)
+ssa1 <- read_sf("bairros_ssa_limpo.shp")
+
+## Executar o join da tabela nova para dentro o shp novo
+acumulado <- merge(x=ssa1, y=bairros_acum, by= "b_novo_ok", all = TRUE)
+
+mapa1 <- tm_shape(acumulado) +
+  tm_polygons("acumulados",
+              style="jenks",
+              title = paste(data_atual))
+mapa1
+
+tmap_mode("view")
+
+tmap_last()
+
+
+```
+
+
+### Incidencia de covid 19 a cada 10.000 pessoas
+
+```{r}
+## Seleciona a primeira e a ultima coluna da tabela incidência (sempre virá na ultima coluna a data mais recorrente disponivel)
+bairros_incid <- dados_mapa1[,c(1, ncol(dados_mapa1),drop = FALSE)]
+
+## Renomeia os campos pra que o join funcione
+names(bairros_incid) <- c("b_novo_ok", "incidencia")
+
+
+## Puxar um shp apenas com as informacoes de bairro (shp limpo)
+ssa2 <- read_sf("bairros_ssa_limpo.shp")
+
+## Executar o join da tabela nova para dentro o shp novo
+incide <- merge(x=ssa2, y=bairros_incid, by= "b_novo_ok", all = TRUE)
+
+
+
+## Criar um novo mapa
+mapa2 <- tm_shape(incide) +
+  tm_polygons("incidencia",
+              style="jenks",
+              title=paste(data_atual))
+mapa2
+
+tmap_mode("view")
+
+tmap_last()
+
+
+```
+
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+
+### Cria um gráfico
+
+```{r}
+
+# Cria um gráfico com os dados de casoa ativos a partir da planilha do Geocombate
+grafico1 <- ggplot(dados, aes(x = Data, y = Casos)) + 
+  
+  geom_line() +
+  geom_smooth()+
+  ggtitle("Casos ativos de COVID 19 em Salvador \ne linha de tendência ")+
+  theme_ipsum_ps()
+
+ggplotly(grafico1)
+
+
+grafico1
+
+
+```
+
+### Pessoas infectadas em Salvador
+
+```{r}
+
+infectados <- tail(dados$Total, n=1)
+
+
+  valueBox(value = infectados, icon = "fas fa-users")
+
+
+```
+
+### Dias de pandemia em Salvador
+
+```{r}
+
+hoje <- Sys.Date()
+         
+tempo <- round(difftime(hoje, "2020-03-23"))
+
+  valueBox(value = tempo, icon = "fas fa-calendar")
+
+```
+
+
+
