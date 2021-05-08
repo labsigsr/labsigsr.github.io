@@ -1,0 +1,224 @@
+---
+title: "Monitor COVID 19 - Setor Censitário BROTAS"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    logo: https://labsigsr.github.io/LOGO_LAB_peq.JPG
+    theme: united
+---
+
+```{r setup, include=FALSE}
+
+library(flexdashboard)
+library(sf)
+library(tmap)
+library(tidyverse)
+library(googlesheets4)
+library(plotly)
+library(zoo)
+library(hrbrthemes)
+library(dplyr)
+
+```
+
+```{r get-data, message=FALSE, include=FALSE}
+
+# Tira a necessidade de autenticação no google pra acessar a planilha
+sheets_deauth()
+
+# Função para carregar os dados da planilha remota (para o gráfico)
+load_remote_data_grafico <- function() {
+  read_sheet("https://docs.google.com/spreadsheets/d/1qwCpFUtG7tC63MEfZwpzdWDkB2dFpUyK56Jjbuc-gts/edit?usp=sharing")
+}
+
+# Função para carregar os dados da planilha remota (casos acumulados)
+load_remote_data <- function() {
+  read_sheet("https://docs.google.com/spreadsheets/d/1x_NC4fga1VKAvWoMQaITZLaGVnsM2YVg06VJeivO0rE/edit?usp=sharing")
+}
+
+# Carrega a planilha para join no shape (incidencia)
+load_remote_data_shape <- function() {
+  read_sheet("https://docs.google.com/spreadsheets/d/185Yj5UXCeipKxRv81WOOT_MM_pSOZ8OSJeSF0NF6y7E/edit?usp=sharing")
+}
+
+## Carrega od dados de ativos (para o gráfico)
+dados_grafico <- load_remote_data_grafico()
+
+## Carrega od dados de acumulados
+dados <- load_remote_data()
+
+## Carrega a tabela nova (incidencia)
+dados_shp <- load_remote_data_shape()
+
+## Variável genérica com a data mais atual
+hoje <- Sys.Date()
+
+
+```
+
+```{js}
+
+document.addEventListener("DOMContentLoaded", function(){
+    $('a[data-toggle="tab"]').on('click', function(e){
+      
+      child = e.target.parentNode;
+      tabnum = Array.from(child.parentNode.children).indexOf(child);
+      
+      column = $(e.target).closest("div[id]");
+      // show the same tab in the other column
+      columnid = column.attr("id");
+      if (columnid == "column") {
+        columnto = "column-1";
+      } else {
+        columnto = "column";
+      }
+      $("div[id="+columnto+"] li:eq("+tabnum+") a").tab('show');
+    })
+});
+```
+
+
+Column {.tabset data-width=500}
+-----------------------------------------------------------------------
+
+### Casos acumulados de COVID 19
+
+```{r}
+
+## Seleciona a primeira e a ultima coluna da tabela incidencia (sempre virá na ultima coluna a data mais recente disponivel)
+bairro_acumulado <- dados[,c(1, ncol(dados_shp), drop = FALSE )]
+
+## Renomeia os campos para que o join de tabelas funcione
+names(bairro_acumulado) <- c("b_novo_ok", "acumulados")
+
+## Puxa um shapefile apenas com as informações de Bairros
+ssa = read_sf("bairros_ssa_brotas.shp")
+
+
+## Executa o Join da tabela nova para dentro do shapefile novo
+acum <- merge(x = ssa, y = bairro_acumulado, by = "b_novo_ok", all = TRUE)
+
+intervalos <- c(0, 500, 1500, 5000, Inf)
+
+mapa2 <- 
+  tm_shape(acum) +
+  tm_polygons(col = "acumulados", 
+              style="fixed",
+              breaks = c(10, 600, 1400, 2500, Inf),
+              textNA = "Sem dado",
+              palette = "inferno",
+              title = paste(hoje)) +
+  
+  tm_layout(legend.format = list(text.separator = "à"))
+ 
+mapa2 
+
+
+
+tmap_mode("view")
+tmap_last()
+
+```
+
+
+### Incidência de COVID 19 a cada 10.000 pessoas
+
+```{r}
+
+## Seleciona a primeira e a ultima coluna da tabela incidencia (sempre virá na ultima coluna a data mais recente disponivel)
+bairro_incid <- dados_shp[,c(1, ncol(dados_shp), drop = FALSE )]
+
+## Renomeia os campos para que o join de tabelas funcione
+names(bairro_incid) <- c("b_novo_ok", "incidencia")
+
+## Puxa um shapefile apenas com as informações de Bairros
+ssa2 = read_sf("bairros_ssa_brotas.shp")
+
+## Executa o Join da tabela nova para dentro do shapefile novo
+incid <- merge(x = ssa2, y = bairro_incid, by = "b_novo_ok", all = TRUE)
+
+## Cria o novo mapa
+mapa3 <- tm_shape(incid) +
+  tm_polygons(col ="incidencia", 
+              style="jenks",
+              textNA = "Sem dado",
+              palette = "viridis",
+              title= paste(hoje)) +
+
+tm_layout(legend.format = list(text.separator = "à"))
+
+mapa3
+
+tmap_mode("view")
+tmap_last()
+
+```
+
+
+Column {.tabset data-width=500}
+-----------------------------------------------------------------------
+
+### Gráfico 1
+
+```{r}
+
+# Cria um gráfico com os dados de casos ativos a partir da planilha do Geocombate
+grafico1 <- ggplot(dados_grafico, aes(x = Data, y = Casos, legend = "Casos ativos")) + 
+  
+  geom_line() +
+  geom_smooth()+
+  ggtitle("Casos ativos de COVID 19 em Brotas 
+          e linha de tendência ")+
+  theme_ipsum_ps()
+
+ggplotly(grafico1)
+
+
+```
+
+
+### Gráfico 2
+
+```{r}
+
+# Cria um gráfico com os dados de casoa ativos a partir da planilha do Geocombate
+grafico2 <- ggplot(dados_grafico, aes(x = Casos, y = Data, legend = "Casos ativos")) + 
+  
+  geom_line() +
+  geom_smooth()+
+  ggtitle("Casos ativos de COVID 19 em Brotas 
+          e linha de tendência ")+
+  theme_ipsum_ps()
+
+ggplotly(grafico2)
+
+
+```
+
+
+Column {data-width=150}
+-----------------------------------------------------------------------
+
+### Pessoas já foram infectadas em Brotas
+
+```{r}
+
+infectados <- tail(dados_grafico$Total, n=1)
+
+
+  valueBox(value = infectados, icon = "fas fa-users")
+
+
+```
+
+
+### Dias de pandemia já se passaram em Brotas
+
+```{r}
+
+tempo <- round(difftime(hoje, "2020-03-23"))
+
+  valueBox(value = tempo, icon = "fas fa-calendar")
+
+```
